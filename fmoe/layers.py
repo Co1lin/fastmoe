@@ -152,6 +152,8 @@ class FMoE(nn.Module):
         gate=NaiveGate,
         expert=None,
         gate_hook=None,
+        mask=None,
+        mask_dict=None
     ):
         super().__init__()
         self.num_expert = num_expert
@@ -173,6 +175,8 @@ class FMoE(nn.Module):
         else:
             self.experts_fused = True
         self.gate_hook = gate_hook
+        self.mask = mask.view(-1)
+        self.mask_dict = mask_dict
 
     def expert_fn(self, inp, fwd_expert_count):
         r"""
@@ -219,11 +223,35 @@ class FMoE(nn.Module):
             self.gate_hook(gate_top_k_idx, gate_score, gate_state_dict)
         # to: (BxLxtop_k) x d_model
         inp = inp.repeat_interleave(repeats=self.top_k, dim=0)
-        x = _fmoe_general_global_forward(
+
+        # delete masked tensors
+        if self.mask != None and self.mask_dict != None:
+            # to: (BxL) x top_k x d_model
+            inp = inp.view(-1, self.top_k, self.d_model)
+            # to: (BxL') x top_k x d_model
+            inp = inp[self.mask == 0, :]
+            # to: (BxL'xtop_k) x d_model
+            inp = inp.view(-1, self.d_model)
+
+        fwd = _fmoe_general_global_forward(
             inp, gate_top_k_idx, self.expert_fn, self.num_expert, self.world_size
         )
-        # to: (BxL) x top_k x d_model
-        x = x.view(-1, self.top_k, self.d_model)
+        x: None
+
+        # recover deleted tensors
+        if self.mask != None and self.mask_dict != None:
+            # to: (BxL') x top_k x d_model
+            fwd = fwd.view(-1, self.top_k, self.d_model)
+            # to: (BxL) x top_k x d_model
+            x = torch.zeros(self.mask.shape[0], self.top_k, self.d_model)
+            # recover
+            x[self.mask == 0] = fwd
+            for k, v in self.mask_dict.items():
+                x[self.mask == k] = v
+        else:
+            # to: (BxL) x top_k x d_model
+            x = fwd.view(-1, self.top_k, self.d_model)
+
         # to: (BxL) x d_model
         x = torch.bmm(gate_score, x).reshape(-1, self.d_model)
 
