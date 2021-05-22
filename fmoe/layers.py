@@ -150,6 +150,7 @@ class FMoE(nn.Module):
         self.gate = gate(d_model, num_expert, world_size, top_k)
         if type(expert) is list:
             self.experts = nn.ModuleList([e(d_model) for e in expert])
+            self.experts_fused = False
         elif expert is not None:
             self.experts = nn.ModuleList([expert(d_model)
                 for _ in range(num_expert)])
