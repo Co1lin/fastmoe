@@ -4,7 +4,7 @@ Layers that FMoE provides to users
 import torch
 import torch.nn as nn
 
-from .functions import moe_prepare_forward
+from .functions import prepare_forward
 from .functions import MOEScatter, MOEGather, MOELinear
 from .functions import AllGather, Slice
 from .gates import NaiveGate
@@ -82,14 +82,24 @@ def _fmoe_general_global_forward(inp, gate, expert_fn, num_expert, world_size):
         global_expert_count,
         fwd_expert_count,
         fwd_batch_size,
-    ) = moe_prepare_forward(gate, num_expert, world_size)
+    ) = prepare_forward(gate, num_expert, world_size)
+    topk = 1
+    if len(gate.shape) == 2:
+        topk = gate.shape[1]
     x = MOEScatter.apply(
-        inp, pos,
+        inp, pos // topk,
         local_expert_count, global_expert_count, fwd_batch_size, world_size
     )
     x = expert_fn(x, fwd_expert_count)
+
+    out_batch_size = inp.shape[0]
+    if len(gate.shape) == 2:
+        out_batch_size *= gate.shape[1]
+
     x = MOEGather.apply(
-        x, pos, local_expert_count, global_expert_count, inp.shape[0], world_size
+        x, pos,
+        local_expert_count, global_expert_count,
+        out_batch_size, world_size
     )
     return x
 
@@ -188,41 +198,34 @@ class FMoE(nn.Module):
         if self.mp_size > 1:
             inp = Slice.apply(inp, self.mp_rank, self.mp_size, self.mp_group)
 
-        gate_top_k_idx, gate_score, gate_state_dict = self.gate(inp)
-        if self.gate_hook:
-            self.gate_hook(gate_top_k_idx, gate_score, gate_state_dict)
-        # to: (BxLxtop_k) x d_model
-        inp = inp.repeat_interleave(repeats=self.top_k, dim=0)
+        gate_top_k_idx, gate_score = self.gate(inp)
 
         # delete masked tensors
         if self.mask != None and self.mask_dict != None:
-            # to: (BxL) x top_k x d_model
-            inp = inp.view(-1, self.top_k, self.d_model)
-            # to: (BxL') x top_k x d_model
-            inp = inp[self.mask == 0, :]
-            # to: (BxL'xtop_k) x d_model
-            inp = inp.view(-1, self.d_model)
+            mask = self.mask.view(-1)
+            # to: (BxL') x d_model
+            inp = inp[mask == 0, :]
 
         fwd = _fmoe_general_global_forward(
-            inp, gate_top_k_idx, self.expert_fn, self.num_expert, self.world_size
+            inp, 
+            gate_top_k_idx,
+            self.expert_fn, self.num_expert, self.world_size
         )
-        x: None
 
         # recover deleted tensors
         if self.mask != None and self.mask_dict != None:
             # to: (BxL') x top_k x d_model
             fwd = fwd.view(-1, self.top_k, self.d_model)
             # to: (BxL) x top_k x d_model
-            x = torch.zeros(self.mask.shape[0], self.top_k, self.d_model)
+            x = torch.zeros(mask.shape[0], self.top_k, self.d_model)
             # recover
-            x[self.mask == 0] = fwd
+            x[mask == 0] = fwd
             for k, v in self.mask_dict.items():
-                x[self.mask == k] = v
+                x[mask == k] = v
         else:
-            # to: (BxL) x top_k x d_model
             x = fwd.view(-1, self.top_k, self.d_model)
 
-        # to: (BxL) x d_model
+        gate_score = gate_score.view(inp.shape[0], 1, self.top_k)
         x = torch.bmm(gate_score, x).reshape(-1, self.d_model)
 
         if self.mp_size > 1:
