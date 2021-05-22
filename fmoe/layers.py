@@ -155,7 +155,7 @@ class FMoE(nn.Module):
         else:
             self.experts_fused = True
         self.gate_hook = gate_hook
-        self.mask = mask.view(-1)
+        self.mask = mask
         self.mask_dict = mask_dict
 
     def expert_fn(self, inp, fwd_expert_count):
