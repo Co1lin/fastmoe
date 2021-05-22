@@ -395,4 +395,5 @@ if __name__ == "__main__":
         mp_group=None,
         dp_group=None,
         world_group=None,
+        data_type=torch.float32,
     )

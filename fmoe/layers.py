@@ -131,7 +131,6 @@ class FMoE(nn.Module):
         top_k=2,
         gate=NaiveGate,
         expert=None,
-        expert_list=None,
         gate_hook=None,
         mask=None,
         mask_dict=None,
@@ -149,12 +148,8 @@ class FMoE(nn.Module):
             self.mp_rank = mp_group.rank()
         self.top_k = top_k
         self.gate = gate(d_model, num_expert, world_size, top_k)
-        if expert_list is not None:
-            if len(expert_list) != num_expert:
-                raise RuntimeError(f'length of expert_list is {len(expert_list)}, but num_expert is {num_expert}')
-            else:
-                self.experts = nn.ModuleList([e(d_model)
-                                              for e in expert_list])
+        if type(expert) is list:
+            self.experts = nn.ModuleList([e(d_model) for e in expert])
         elif expert is not None:
             self.experts = nn.ModuleList([expert(d_model)
                 for _ in range(num_expert)])
@@ -211,8 +206,6 @@ class FMoE(nn.Module):
         if self.mask != None and self.mask_dict != None:
             mask = self.mask.view(-1)
             # to: (BxL') x d_model
-            print(mask.shape)
-            print(inp.shape)
             inp = inp[mask == 0, :]
             gate_top_k_idx = gate_top_k_idx[mask == 0, :]
 
