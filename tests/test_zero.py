@@ -51,9 +51,10 @@ def test_zero_transformer(num_expert=2, batch_size=4, d_hidden=8, world_size=1):
 
 def _test_zero_transformer(num_expert=2, batch_size=4, d_hidden=8, world_size=1):
     inp = torch.rand(batch_size, d_hidden).cuda()
-    mask = [0, 1, 0, 0]
+    mask = torch.zeros(inp.shape[0], dtype=torch.long)
+    mask[1] = 1
     mask_dict = {
-        1: torch.zeros(8)
+        1: torch.zeros(d_hidden).cuda()
     }
     model = FMoETransformerMLP(num_expert, d_hidden, d_hidden * 4, world_size,
             gate=ConstantGate, mask=mask, mask_dict=mask_dict).cuda()
