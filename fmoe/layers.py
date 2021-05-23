@@ -151,6 +151,7 @@ class FMoE(nn.Module):
         if type(expert) is list:
             self.experts = nn.ModuleList([e(d_model) for e in expert])
             self.experts_fused = False
+            self.num_expert = len(expert)
         elif expert is not None:
             self.experts = nn.ModuleList([expert(d_model)
                 for _ in range(num_expert)])
