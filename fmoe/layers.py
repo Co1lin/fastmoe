@@ -212,7 +212,7 @@ class FMoE(nn.Module):
             gate_top_k_idx = gate_top_k_idx[mask == 0, :]
 
         fwd = _fmoe_general_global_forward(
-            inp, 
+            inp,
             gate_top_k_idx,
             self.expert_fn, self.num_expert, self.world_size
         )
