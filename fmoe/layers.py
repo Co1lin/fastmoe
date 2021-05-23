@@ -147,17 +147,17 @@ class FMoE(nn.Module):
             self.mp_size = mp_group.size()
             self.mp_rank = mp_group.rank()
         self.top_k = top_k
-        self.gate = gate(d_model, num_expert, world_size, top_k)
         if type(expert) is list:
             self.experts = nn.ModuleList([e(d_model) for e in expert])
             self.experts_fused = False
-            self.num_expert = len(expert)
+            self.num_expert = num_expert = len(expert)
         elif expert is not None:
             self.experts = nn.ModuleList([expert(d_model)
                 for _ in range(num_expert)])
             self.experts_fused = False
         else:
             self.experts_fused = True
+        self.gate = gate(d_model, num_expert, world_size, top_k)
         self.gate_hook = gate_hook
         self.mask = mask
         self.mask_dict = mask_dict

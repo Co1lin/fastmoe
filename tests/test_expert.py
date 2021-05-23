@@ -60,7 +60,7 @@ def _assert_numerical(names, moe_out_list, raw_out_list, rank, precision=1e-3):
             assert False
 
 @pytest.mark.parametrize("batch_size", [4])
-@pytest.mark.parametrize("num_expert", [4, 8])
+@pytest.mark.parametrize("num_expert", [None])
 @pytest.mark.parametrize("d_model", [16])
 @pytest.mark.parametrize("top_k", [2, 3])
 @pytest.mark.parametrize("expert", [ [NaiveExpert for _ in range(4)], [LinearExpert, NaiveExpert, LinearExpert, NaiveExpert, LinearExpert, NaiveExpert, LinearExpert, NaiveExpert] ])

@@ -57,7 +57,7 @@ class BruteForceMoE(nn.Module):
         self.top_k = top_k
         if type(expert) is list:
             self.experts = [e(d_model) for e in expert]
-            self.num_expert = len(expert)
+            self.num_expert = num_expert = len(expert)
         else:
             self.experts = [expert(d_model) for _ in range(num_expert * world_size)]
 
